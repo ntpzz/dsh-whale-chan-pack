@@ -97,7 +97,7 @@ function injectUI(win) {
           setInterval(est, 2000); est();
 
           // —— 2) 语音输入：本地 Whisper(离线，首次下载模型可选) ——
-          var WV = window.__whaleVoice;
+          var WV = window.whaleVoice;
           var mic = { listening:false, ctx:null, src:null, sp:null, buf:[], stream:null, modelChosen:false };
           function editableEl(){
             return document.querySelector('[contenteditable="true"][role="textbox"], [contenteditable="true"][data-lexical-editor], [contenteditable="true"]')

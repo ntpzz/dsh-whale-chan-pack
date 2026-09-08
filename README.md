@@ -77,6 +77,6 @@ dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/orca-lin
 
 本项目（整合编排、`desktop/` 客户端、安装脚本）以 **MIT** 发布，见 [LICENSE](LICENSE)。
 
-**你只是“打包”，不拥有上游代码/美术版权**。各上游仓库及许可、美术署名请见 [NOTICE.md](NOTICE.md)。其中鲸鱼娘相关**美术**为 **CC BY-NC-SA 4.0（禁止商用）**，发布整合包时请保留署名与许可链接。
+**本作品只是“打包”，不拥有上游代码/美术版权**。各上游仓库及许可、美术署名请见 [NOTICE.md](NOTICE.md)。其中鲸鱼娘相关**美术**为 **CC BY-NC-SA 4.0（禁止商用）**，发布整合包时请保留署名与许可链接。
 
 详见 [NOTICE.md](NOTICE.md) 与 [plugins/install.md](plugins/install.md)。

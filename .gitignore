@@ -1,0 +1,15 @@
+# logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# node
+node_modules/
+*.local
+
+# local-only / secrets
+.env
+.secrets/

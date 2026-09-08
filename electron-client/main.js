@@ -44,13 +44,17 @@ async function bootServer() {
   });
   serverPid = server.pid;
   let acc = "";
+  let errAcc = "";
   server.stdout.on("data", (d) => { acc += d; });
-  server.stderr.on("data", () => {});
+  server.stderr.on("data", (d) => { errAcc += d; });
   const t0 = Date.now();
   while (Date.now() - t0 < 60000) {
     const m = /dsh\s+web:\s*(\S+)/.exec(acc);
     if (m) return m[1];
-    if (server.exitCode !== null) throw new Error("dsh web 启动失败");
+    if (server.exitCode !== null) {
+      const tail = errAcc.trim().split(/\r?\n/).slice(-6).join(" | ");
+      throw new Error("dsh web 启动失败(退出码 " + server.exitCode + ")：" + (tail || "无输出，多半是端口 3080 已被其它 dsh 占用"));
+    }
     await sleep(250);
   }
   throw new Error("等待 dsh web 启动超时");

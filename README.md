@@ -1,6 +1,6 @@
-# dsh-whale-pack · DSH「鲸鱼·整合包」
+# 鲸鱼娘客户端 · dsh-whale-pack
 
-> 把几个开源的 **DeepSeek Harness (dsh)** 插件 + 一个「关窗即退」桌面客户端打成一包，装一次即得一套带鲸鱼娘主题、会轮换状态梗文案的桌面版 DSH。
+> DeepSeek Harness (dsh)「鲸鱼娘」整合包：鲸鱼娘桌面客户端 + 鲸鱼娘主题皮肤 + 状态梗文案轮换。装一次即得一套带鲸鱼娘主题的桌面版 DSH。
 
 面向 Windows（`dsh web`），纯配置集成，不修改 dsh 本体。
 

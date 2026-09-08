@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { Converter } from "opencc-js";
+import { pathToFileURL } from "node:url";
 
 const name = "whale-voice";
 const inject = [];
@@ -10,14 +11,18 @@ const PREPARE_ROUTE = "/plugins/dsh-whale-voice/prepare.json";
 const TRANSCRIBE_ROUTE = "/plugins/dsh-whale-voice/transcribe.json";
 const CONFIG_PATH = process.env.DSH_WHALE_VOICE_FILE || join(homedir(), ".dsh", "whale-voice", "config.json");
 const LEGACY_PATH = process.env.APPDATA ? join(process.env.APPDATA, "dsh-whale-chan-client", "whale-voice.json") : "";
+const RUNTIME_DIR = process.env.DSH_WHALE_VOICE_RUNTIME_DIR || join(homedir(), ".dsh", "whale-voice", "runtime");
+const RUNTIME_PACKAGES = ["@huggingface/transformers@3.0.0", "opencc-js@1.4.2"];
 const MODELS = ["onnx-community/whisper-tiny", "onnx-community/whisper-base", "onnx-community/whisper-small"];
 const LANGUAGES = ["auto", "zh", "en", "ja", "ko"];
 const DEVICES = ["cpu", "wasm", "gpu"];
 const DEFAULT_CONFIG = Object.freeze({ model: MODELS[0], language: "zh", device: "cpu", cacheDir: "", microphoneId: "", simplifyChinese: true, micIcon: "" });
 const LANGUAGE_NAMES = { auto: undefined, zh: "chinese", en: "english", ja: "japanese", ko: "korean" };
-const toSimplifiedChinese = Converter({ from: "tw", to: "cn" });
 let pipelinePromise = null;
 let pipelineKey = "";
+let runtimePromise = null;
+let transformersPromise = null;
+let openCCPromise = null;
 
 function normalizeConfig(value) {
   const source = value && typeof value === "object" ? value : {};
@@ -83,12 +88,64 @@ function cacheDir(config) {
   return config.cacheDir || join(homedir(), ".dsh", "whale-voice", "models");
 }
 
-async function getPipeline(config) {
+async function fileExists(file) {
+  try { await access(file); return true; } catch { return false; }
+}
+
+function npmInstallRuntime() {
+  return new Promise((resolve, reject) => {
+    const command = process.platform === "win32" ? "npm.cmd" : "npm";
+    const child = spawn(command, ["install", "--prefix", RUNTIME_DIR, "--omit=dev", "--no-package-lock", "--no-save", ...RUNTIME_PACKAGES], { stdio: "pipe", windowsHide: true });
+    let output = "";
+    child.stdout?.on("data", (chunk) => { output = (output + chunk).slice(-4000); });
+    child.stderr?.on("data", (chunk) => { output = (output + chunk).slice(-4000); });
+    const timeout = setTimeout(() => child.kill(), 10 * 60 * 1000);
+    child.once("error", (error) => { clearTimeout(timeout); reject(error); });
+    child.once("exit", (code) => { clearTimeout(timeout); code === 0 ? resolve() : reject(new Error(`Whisper 运行库下载失败（npm 退出码 ${code}）：${output.trim()}`)); });
+  });
+}
+
+async function ensureRuntime(download = false) {
+  if (runtimePromise) return runtimePromise;
+  runtimePromise = (async () => {
+    const transformers = join(RUNTIME_DIR, "node_modules", "@huggingface", "transformers", "package.json");
+    const opencc = join(RUNTIME_DIR, "node_modules", "opencc-js", "package.json");
+    if (!await fileExists(transformers) || !await fileExists(opencc)) {
+      if (!download) throw new Error("Whisper 运行库尚未准备，请先在语音设置中点击“保存并准备模型”");
+      await npmInstallRuntime();
+    }
+    if (!await fileExists(transformers) || !await fileExists(opencc)) throw new Error("Whisper 运行库下载未完成");
+  })();
+  try { return await runtimePromise; } catch (error) { runtimePromise = null; throw error; }
+}
+
+async function importRuntimePackage(parts) {
+  const packageDir = join(RUNTIME_DIR, "node_modules", ...parts);
+  const manifest = JSON.parse(await readFile(join(packageDir, "package.json"), "utf8"));
+  const entry = manifest.module || manifest.main || "index.js";
+  return import(pathToFileURL(join(packageDir, entry)).href);
+}
+
+async function getTransformers(download = false) {
+  await ensureRuntime(download);
+  transformersPromise ||= importRuntimePackage(["@huggingface", "transformers"]);
+  return transformersPromise;
+}
+
+async function toSimplifiedChinese(text) {
+  await ensureRuntime(false);
+  openCCPromise ||= importRuntimePackage(["opencc-js"]);
+  const opencc = await openCCPromise;
+  const Converter = opencc.Converter || opencc.default?.Converter;
+  return typeof Converter === "function" ? Converter({ from: "tw", to: "cn" })(text) : text;
+}
+
+async function getPipeline(config, download = false) {
   const key = `${config.model}\0${config.device}\0${cacheDir(config)}`;
   if (pipelinePromise && pipelineKey === key) return pipelinePromise;
   pipelineKey = key;
   pipelinePromise = (async () => {
-    const transformers = await import("@huggingface/transformers");
+    const transformers = await getTransformers(download);
     transformers.env.cacheDir = cacheDir(config);
     try { return await transformers.pipeline("automatic-speech-recognition", config.model, { device: config.device }); }
     catch { return transformers.pipeline("automatic-speech-recognition", config.model, { device: "cpu" }); }
@@ -104,7 +161,7 @@ async function transcribe(samples) {
   const pipe = await getPipeline(config);
   const output = await pipe(pcm, { language: LANGUAGE_NAMES[config.language], task: "transcribe", return_timestamps: false });
   const raw = String(output?.text || output?.[0]?.text || "").trim();
-  const text = config.language === "zh" && config.simplifyChinese !== false ? toSimplifiedChinese(raw) : raw;
+  const text = config.language === "zh" && config.simplifyChinese !== false ? await toSimplifiedChinese(raw) : raw;
   return { text };
 }
 
@@ -128,7 +185,8 @@ function createPrepareHandler() {
   return async (req, res) => {
     try {
       if (!isLoopback(req) || req.method !== "POST") return json(res, 405, { ok: false, error: "POST from loopback required" });
-      await getPipeline(await readConfig());
+      await ensureRuntime(true);
+      await getPipeline(await readConfig(), false);
       return json(res, 200, { ok: true });
     } catch (error) { return json(res, 500, { ok: false, error: String(error?.message || error) }); }
   };

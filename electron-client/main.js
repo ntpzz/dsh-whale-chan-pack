@@ -176,7 +176,7 @@ function injectUI(win) {
             (host.style.position === 'static' ? host : document.body).appendChild(panel);
           }
           function attachMic(){
-            if (!WV) return;
+            if (!WV){ console.log('[voice] whaleVoice 未暴露, typeof=', typeof window.whaleVoice); return; }
             if (document.querySelector('[data-whale-mic]')) return; // 已存在则跳过(重渲染后被移除会自动补回)
             var el = editableEl(); if (!el) return;
             var host = (el.closest('form, [class*="composer"], [class*="Composer"], [role="toolbar"]')) || el.parentElement;
@@ -269,6 +269,7 @@ app.whenReady().then(async () => {
   });
   win.loadURL(url);
   injectUI(win);
+  if (process.env.DSH_DEV === "1") win.webContents.openDevTools({ mode: "detach" });
   win.on("closed", () => { if (serverPid) killTree(serverPid); app.quit(); });
   win.on("close", () => { if (serverPid) killTree(serverPid); });
 });

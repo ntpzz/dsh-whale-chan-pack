@@ -60,34 +60,81 @@ async function bootServer() {
   throw new Error("等待 dsh web 启动超时");
 }
 
-function injectCostPill(win) {
-  // 估算当前对话文本量 -> token -> 费用（DeepSeek 近期价，粗略混合）
+function injectUI(win) {
+  // 页面内注入：费用提示(自首次启动累计) + 语音输入(🎤)。全部浏览器端、健壮降级。
   win.webContents.on("did-finish-load", () => {
     const js = `
       (function(){
-        if (window.__whaleCostPill) return;
-        window.__whaleCostPill = true;
-        function est(){
-          try {
-            let chars = 0;
-            // 聊天消息体（尽力而为）：统计较长文本节点
-            document.querySelectorAll('[class*="message"], [class*="Message"], [role="listitem"]').forEach(function(el){
-              const t = el.innerText || "";
-              if (t.length > 40) chars += t.length;
-            });
-            const tokens = Math.max(1, Math.round(chars * 0.5));
-            const costYuan = (tokens / 1e6) * 5.0; // ¥/1M 混合估算
-            const s = '🐋 大肥鱼吃了 ~' + tokens + ' token · ≈¥' + costYuan.toFixed(2);
-            pill.textContent = s;
-          } catch(e){}
-        }
-        const pill = document.createElement('div');
-        pill.id = 'whale-cost-pill';
-        pill.style.cssText = 'position:fixed;left:12px;bottom:64px;z-index:99999;font-size:12px;padding:4px 10px;border-radius:14px;opacity:.9;pointer-events:none;font-family:inherit;';
-        pill.style.color = getComputedStyle(document.body).color;
-        pill.style.background = getComputedStyle(document.body).backgroundColor;
-        document.body.appendChild(pill);
-        setInterval(est, 2000); est();
+        try {
+          if (window.__whaleUI) return;
+          window.__whaleUI = true;
+          var LS = function(k,d){ try { return localStorage.getItem(k)===null?d:Number(localStorage.getItem(k)); } catch(e){ return d; } };
+          var LSS = function(k,v){ try { localStorage.setItem(k,String(v)); } catch(e){} };
+
+          // —— 1) 费用：大肥鱼偷吃了你 ~N token · ≈¥X（从首次启动起累计，只增不减）
+          var pill = document.createElement('div');
+          pill.id = 'whale-cost-pill';
+          pill.style.cssText = 'position:fixed;left:12px;bottom:64px;z-index:99999;font-size:12px;padding:4px 10px;border-radius:14px;opacity:.92;pointer-events:none;font-family:inherit;';
+          pill.style.color = getComputedStyle(document.body).color;
+          pill.style.background = getComputedStyle(document.body).backgroundColor;
+          var started = LS('whaleCostTokens', 0);
+          function est(){
+            try {
+              var chars = 0;
+              document.querySelectorAll('[class*="message"], [class*="Message"], [role="listitem"]').forEach(function(el){
+                var t = (el.innerText || '');
+                if (t.length > 40) chars += t.length;
+              });
+              var cur = Math.max(1, Math.round(chars * 0.5));
+              // 累计记录：取历史与当前较大值，自首次启动只增不减
+              var total = Math.max(started, cur);
+              LSS('whaleCostTokens', total);
+              var cost = (total / 1e6) * 5.0; // ¥/1M 混合估算(DeepSeek 价)
+              pill.textContent = '🐋 大肥鱼偷吃了你 ~' + total + ' token · ≈¥' + cost.toFixed(2);
+            } catch(e){}
+          }
+          (document.body || document.documentElement).appendChild(pill);
+          setInterval(est, 2000); est();
+
+          // —— 2) 语音输入：给输入框旁加一个 🎤
+          var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+          var rec = null, listening = false;
+          function editable(){ return document.querySelector('textarea[role="textbox"], textarea') || document.querySelector('[contenteditable="true"]') || null; }
+          function setNative(el, text){
+            try {
+              var proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : (el.isContentEditable ? HTMLDivElement.prototype : HTMLInputElement.prototype);
+              var set = Object.getOwnPropertyDescriptor(proto, 'value');
+              if (set && set.set) set.set.call(el, text);
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+            } catch(e){ el.value = text; }
+          }
+          function fill(text){
+            var el = editable(); if (!el) return;
+            if (el.isContentEditable) { el.textContent = (el.textContent ? el.textContent + ' ' : '') + text; el.dispatchEvent(new Event('input',{bubbles:true})); }
+            else { var cur = el.value || ''; setNative(el, (cur ? cur.replace(/\\s+$/,'') + ' ' : '') + text); }
+          }
+          function attachMic(){
+            if (attachMic.done || !SR) return;
+            var el = editable(); if (!el || !el.parentElement) return;
+            var b = document.createElement('button');
+            b.type = 'button'; b.title = '语音输入'; b.textContent = '🎤';
+            b.style.cssText = 'margin-left:8px;align-self:center;width:30px;height:30px;border-radius:50%;border:1px solid rgba(128,128,128,.4);background:transparent;cursor:pointer;font-size:15px;flex:0 0 auto;';
+            b.onclick = function(){
+              if (listening) { try{rec.stop();}catch(e){} return; }
+              try {
+                rec = new SR();
+                rec.lang = (navigator.language||'').indexOf('en')===0 ? 'en-US' : 'zh-CN';
+                rec.interimResults = false;
+                rec.onresult = function(ev){ var t=''; for(var i=ev.resultIndex;i<ev.results.length;i++) t+=ev.results[i][0].transcript; if(t.trim()) fill(t.trim()); };
+                rec.onend = function(){ listening=false; b.textContent='🎤'; };
+                rec.onerror = function(){};
+                rec.start(); listening=true; b.textContent='⏹';
+              } catch(e){}
+            };
+            try { el.parentElement.style.display='flex'; el.parentElement.appendChild(b); attachMic.done = true; } catch(e){}
+          }
+          if (SR) { attachMic(); setInterval(attachMic, 1500); }
+        } catch(e){}
       })();
     `;
     win.webContents.executeJavaScript(js).catch(() => {});
@@ -105,7 +152,7 @@ app.whenReady().then(async () => {
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
   win.loadURL(url);
-  injectCostPill(win);
+  injectUI(win);
   win.on("closed", () => { if (serverPid) killTree(serverPid); app.quit(); });
   win.on("close", () => { if (serverPid) killTree(serverPid); });
 });

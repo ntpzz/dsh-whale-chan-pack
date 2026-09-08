@@ -176,7 +176,8 @@ function injectUI(win) {
             (host.style.position === 'static' ? host : document.body).appendChild(panel);
           }
           function attachMic(){
-            if (attachMic.done || !WV) return;
+            if (!WV) return;
+            if (document.querySelector('[data-whale-mic]')) return; // 已存在则跳过(重渲染后被移除会自动补回)
             var el = editableEl(); if (!el) return;
             var host = (el.closest('form, [class*="composer"], [class*="Composer"], [role="toolbar"]')) || el.parentElement;
             if (!host) return;
@@ -200,9 +201,10 @@ function injectUI(win) {
               }).catch(function(){ startRecord(b); });
             };
             WV.onStatus(function(msg){ if (msg) setStatus(b, msg); });
-            try { if (send && send.parentNode) send.parentNode.insertBefore(b, send); else host.appendChild(b); attachMic.done = true; } catch(e){}
+            b.setAttribute('data-whale-mic', '1');
+            try { if (send && send.parentNode) send.parentNode.insertBefore(b, send); else host.appendChild(b); } catch(e){}
           }
-          if (WV) { attachMic(); setInterval(attachMic, 1500); }
+          if (WV) { attachMic(); setInterval(attachMic, 1200); }
         } catch(e){}
       })();
     `;

@@ -3,7 +3,7 @@
 // - 用带鲸鱼娘图标的窗口打开其打印的 token URL
 // - 关闭窗口 => 停掉这个客户端启动的 dsh 并退出
 // - 轻量：页面内注入一条 “大肥鱼吃了 ~N token · ≈¥X” 估算提示
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, session } = require("electron");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -115,23 +115,43 @@ function injectUI(win) {
           }
           function attachMic(){
             if (attachMic.done || !SR) return;
-            var el = editable(); if (!el || !el.parentElement) return;
+            var el = editable(); if (!el) return;
+            var host = (el.closest && (el.closest('form, [class*="composer"], [class*="Composer"], [role="toolbar"]'))) || el.parentElement;
+            if (!host) return;
+            var send = null;
+            var btns = host.querySelectorAll('button, [role="button"]');
+            for (var i = 0; i < btns.length; i++) {
+              var x = btns[i];
+              var lab = (((x.getAttribute && (x.getAttribute('aria-label') || '')) || '') + ' ' + (x.textContent || '')).toLowerCase();
+              if (lab.indexOf('send') >= 0 || lab.indexOf('发送') >= 0) { send = x; }
+            }
+            if (!send && btns.length) send = btns[btns.length - 1]; // 退路：最后一个操作键(通常是发送)
             var b = document.createElement('button');
             b.type = 'button'; b.title = '语音输入'; b.textContent = '🎤';
-            b.style.cssText = 'margin-left:8px;align-self:center;width:30px;height:30px;border-radius:50%;border:1px solid rgba(128,128,128,.4);background:transparent;cursor:pointer;font-size:15px;flex:0 0 auto;';
+            b.style.cssText = 'margin:0 4px;align-self:center;width:30px;height:30px;border-radius:50%;border:1px solid rgba(128,128,128,.4);background:transparent;cursor:pointer;font-size:15px;flex:0 0 auto;z-index:99999;position:relative;';
             b.onclick = function(){
               if (listening) { try{rec.stop();}catch(e){} return; }
-              try {
-                rec = new SR();
-                rec.lang = (navigator.language||'').indexOf('en')===0 ? 'en-US' : 'zh-CN';
-                rec.interimResults = false;
-                rec.onresult = function(ev){ var t=''; for(var i=ev.resultIndex;i<ev.results.length;i++) t+=ev.results[i][0].transcript; if(t.trim()) fill(t.trim()); };
-                rec.onend = function(){ listening=false; b.textContent='🎤'; };
-                rec.onerror = function(){};
-                rec.start(); listening=true; b.textContent='⏹';
-              } catch(e){}
+              function begin(){
+                try {
+                  rec = new SR();
+                  rec.lang = (navigator.language||'').indexOf('en')===0 ? 'en-US' : 'zh-CN';
+                  rec.interimResults = false;
+                  rec.onresult = function(ev){ var t=''; for(var i=ev.resultIndex;i<ev.results.length;i++) t+=ev.results[i][0].transcript; if(t.trim()) fill(t.trim()); };
+                  rec.onend = function(){ listening=false; b.textContent='🎤'; };
+                  rec.onerror = function(){ listening=false; b.textContent='🎤'; };
+                  rec.start(); listening=true; b.textContent='⏹';
+                } catch(e){ b.textContent='🎤'; }
+              }
+              // 先触发一次麦克风授权，再开识别
+              if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(function(){ begin(); }).catch(function(){ b.textContent='🎤'; });
+              } else begin();
             };
-            try { el.parentElement.style.display='flex'; el.parentElement.appendChild(b); attachMic.done = true; } catch(e){}
+            try {
+              if (send && send.parentNode) send.parentNode.insertBefore(b, send);
+              else host.appendChild(b);
+              attachMic.done = true;
+            } catch(e){}
           }
           if (SR) { attachMic(); setInterval(attachMic, 1500); }
         } catch(e){}
@@ -142,6 +162,11 @@ function injectUI(win) {
 }
 
 app.whenReady().then(async () => {
+  // 允许本窗口请求麦克风/摄像头(语音识别需要 media 权限)
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback) => {
+    callback(permission === "media" || permission === "mediaKeySystem");
+  });
+
   let url;
   try { url = await bootServer(); }
   catch (e) { console.error("DeepSeek 客户端错误: " + e.message); app.exit(1); return; }

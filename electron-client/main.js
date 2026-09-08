@@ -35,6 +35,21 @@ function killTree(pid) { try { require("node:child_process").spawnSync(path.join
 
 let server = null;
 let serverPid = null;
+let shuttingDown = false;
+
+// DSH writes a committed, append-only session log.  Do not immediately use
+// taskkill on a normal window close: give the child a chance to flush its last
+// batch first, then retain a short forced-stop fallback for a stuck process.
+async function stopServerGracefully() {
+  const child = server;
+  if (!child || child.exitCode !== null) return;
+  const done = new Promise((resolve) => child.once("exit", resolve));
+  try { child.kill("SIGTERM"); } catch {}
+  await Promise.race([done, sleep(5000)]);
+  if (child.exitCode === null && serverPid) killTree(serverPid);
+  server = null;
+  serverPid = null;
+}
 
 async function bootServer() {
   const node = nodePath();
@@ -303,8 +318,12 @@ app.whenReady().then(async () => {
   win.loadURL(url);
   injectUI(win);
   if (process.env.DSH_DEV === "1") win.webContents.openDevTools({ mode: "detach" });
-  win.on("closed", () => { if (serverPid) killTree(serverPid); app.quit(); });
-  win.on("close", () => { if (serverPid) killTree(serverPid); });
+  win.on("close", (event) => {
+    if (shuttingDown) return;
+    event.preventDefault();
+    shuttingDown = true;
+    stopServerGracefully().finally(() => { try { win.destroy(); } catch {} app.quit(); });
+  });
 });
 
-app.on("window-all-closed", () => { if (serverPid) killTree(serverPid); app.quit(); });
+app.on("window-all-closed", () => { app.quit(); });

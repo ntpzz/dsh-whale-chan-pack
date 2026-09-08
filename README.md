@@ -18,7 +18,7 @@
 | **dsh-whale-meter** | 设置中的费用/用量页，本地持久化统计 | 本项目 |
 | **dsh-whale-voice** | 设置中的语音配置页，与 Electron 本地 Whisper 共享配置 | 本项目 |
 
-依赖运行环境：**DeepSeek Harness (`dsh web`) + Node ≥ 22.19 + Chrome/Edge + pnpm ≥ 9**。
+依赖运行环境：**DeepSeek Harness (`dsh web`) + Node ≥ 22.19 + Chrome/Edge + pnpm ≥ 9**。安装前请先在目标电脑运行一次 `npx @deepseek-ai/dsh web`，让它创建 `web` profile 后退出。
 
 ---
 
@@ -31,7 +31,7 @@
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -ProfileName web
 ```
 
-脚本会自动：把费用/语音页、状态文案、`dsh-pilot` 和皮肤装进 `~/.dsh/profiles/<name>` → 注册 bundle → 写皮肤互斥（启用 manager + maid，停用 orca）→ 安装并打包 Electron → 在桌面创建唯一的 **DeepSeek Harness.exe**。
+脚本会自动：移除旧的桌面启动器 → 把费用/语音页、状态文案、`dsh-pilot` 和皮肤装进 `~/.dsh/profiles/<name>` → 注册 bundle → 写皮肤互斥（启用 manager + maid，停用 orca）→ 安装并打包 Electron → 在桌面创建唯一的 **DeepSeek Harness.exe**。
 
 ### 方式二：手动 `dsh plugin add`
 
@@ -59,13 +59,13 @@ dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/orca-lin
 
 ### 装完
 
-首次安装都需要**重启一次 `dsh web`** 才会生效（本包只改了配置层，不热改正在运行的实例）。重启后在「设置」里能看到 **费用/用量**、**语音**、**状态文案** 与 **皮肤管理** 页；侧边栏底部出现 ✈️ 即表示浏览器控制可用。
+首次安装都需要**重启一次 `dsh web`** 才会生效（本包只改了配置层，不热改正在运行的实例）。之后只双击桌面的 **DeepSeek Harness.exe**：它会启动 DSH、打开唯一窗口；关窗时会先让 DSH 写完会话记录再退出。设置中会看到 **费用/用量**、**语音**、**状态文案** 与 **皮肤管理** 页；侧边栏底部出现 ✈️ 即表示浏览器控制可用。
 
 ---
 
 ## 客户端
 
-本包唯一客户端是 `electron-client`。安装脚本会在桌面创建可直接双击的 **DeepSeek Harness.exe**，不是快捷方式。开发时也可手动启动：
+本包唯一客户端是 `electron-client`。安装脚本会在桌面创建可直接双击的 **DeepSeek Harness.exe**，不是快捷方式；不会同时安装旧的 VBS/Chrome 启动器。GitHub 不提交约 195 MB 的二进制文件，脚本会在每台电脑上以同一份锁定依赖本地生成它。
 
 ```powershell
 cd electron-client

@@ -33,6 +33,9 @@ if ($SkipBrowserControl) { $packs = $packs | Where-Object { $_.bundle -ne "dsh-p
 Write-Host ">> Installing plugins into profile '$ProfileName'"
 Push-Location $profileDir
 try {
+  # This pack owns the desktop client. Remove the legacy launcher if a prior
+  # installation left it behind, otherwise it may overwrite the portable EXE.
+  & $pnpm.Source remove -w dsh-whale-desktop-launcher 2>$null
   foreach ($p in $packs) {
     Write-Host ("-- add " + $p.spec)
     & $pnpm.Source add -w $p.spec
@@ -42,7 +45,7 @@ try {
 
 # Register every bundle in dsh.profile.bundles (deps were added by pnpm above).
 $names = ($packs | ForEach-Object { $_.bundle }) -join ","
-& $node -e "const fs=require('fs');const f=process.argv[1];const j=JSON.parse(fs.readFileSync(f,'utf8'));for(const n of process.argv[2].split(',')){if(n&&!j.dsh.profile.bundles.includes(n))j.dsh.profile.bundles.push(n)}fs.writeFileSync(f,JSON.stringify(j,null,2)+String.fromCharCode(10));" -- $pkgPath $names
+& $node -e "const fs=require('fs');const f=process.argv[1];const j=JSON.parse(fs.readFileSync(f,'utf8'));const profile=(j.dsh??={}).profile??=( { bundles: [] });profile.bundles??=[];profile.bundles=profile.bundles.filter(n=>n!=='dsh-whale-desktop-launcher');for(const n of process.argv[2].split(',')){if(n&&!profile.bundles.includes(n))profile.bundles.push(n)}fs.writeFileSync(f,JSON.stringify(j,null,2)+String.fromCharCode(10));" -- $pkgPath $names
 
 # Skin mutual exclusion: keep manager + maid-atelier; disable orca-link.
 $rows = @("- id: ui-skin-maid-atelier`n  disabled: false`n- id: ui-skin-orca-link`n  disabled: true`n- id: ui-skin-deep-whale-manager`n  disabled: false`n")

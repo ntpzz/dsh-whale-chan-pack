@@ -10,7 +10,7 @@ const LEGACY_PATH = process.env.APPDATA ? join(process.env.APPDATA, "dsh-whale-c
 const MODELS = ["onnx-community/whisper-tiny", "onnx-community/whisper-base", "onnx-community/whisper-small"];
 const LANGUAGES = ["auto", "zh", "en", "ja", "ko"];
 const DEVICES = ["cpu", "wasm", "gpu"];
-const DEFAULT_CONFIG = Object.freeze({ model: MODELS[0], language: "zh", device: "cpu", cacheDir: "" });
+const DEFAULT_CONFIG = Object.freeze({ model: MODELS[0], language: "zh", device: "cpu", cacheDir: "", microphoneId: "", simplifyChinese: true });
 
 function normalizeConfig(value) {
   const source = value && typeof value === "object" ? value : {};
@@ -18,7 +18,9 @@ function normalizeConfig(value) {
     model: MODELS.includes(source.model) ? source.model : DEFAULT_CONFIG.model,
     language: LANGUAGES.includes(source.language) ? source.language : DEFAULT_CONFIG.language,
     device: DEVICES.includes(source.device) ? source.device : DEFAULT_CONFIG.device,
-    cacheDir: typeof source.cacheDir === "string" ? source.cacheDir.trim().slice(0, 1000) : ""
+    cacheDir: typeof source.cacheDir === "string" ? source.cacheDir.trim().slice(0, 1000) : "",
+    microphoneId: typeof source.microphoneId === "string" ? source.microphoneId.slice(0, 500) : "",
+    simplifyChinese: source.simplifyChinese !== false
   };
 }
 

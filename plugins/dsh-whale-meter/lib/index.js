@@ -17,7 +17,10 @@ const DEFAULT_CONFIG = Object.freeze({
   cacheHit: 0.014,
   cacheMiss: 0.44,
   output: 1.32,
-  text: "🐋 大肥鱼偷吃了你 {tokens} token · ≈{currency}{cost}"
+  text: "🐋 大肥鱼偷吃了你 {tokens} token · ≈{currency}{cost}",
+  composerText: "本会话 {tokens} token · ≈{currency}{cost}",
+  composerPosition: "above-right",
+  sidebarText: "{tokens}"
 });
 
 function blankState() {
@@ -47,7 +50,10 @@ function normalizeConfig(value) {
     cacheHit: finite(source.cacheHit, DEFAULT_CONFIG.cacheHit),
     cacheMiss: finite(source.cacheMiss, DEFAULT_CONFIG.cacheMiss),
     output: finite(source.output, DEFAULT_CONFIG.output),
-    text: typeof source.text === "string" && source.text ? source.text.slice(0, 240) : DEFAULT_CONFIG.text
+    text: typeof source.text === "string" && source.text ? source.text.slice(0, 240) : DEFAULT_CONFIG.text,
+    composerText: typeof source.composerText === "string" && source.composerText ? source.composerText.slice(0, 240) : DEFAULT_CONFIG.composerText,
+    composerPosition: ["above-left", "above-right", "inside-left", "inside-right", "hidden"].includes(source.composerPosition) ? source.composerPosition : DEFAULT_CONFIG.composerPosition,
+    sidebarText: typeof source.sidebarText === "string" && source.sidebarText ? source.sidebarText.slice(0, 120) : DEFAULT_CONFIG.sidebarText
   };
 }
 

@@ -23,12 +23,21 @@ window.__ModuleLoader__.load({
       const [payload, setPayload] = React.useState(null);
       const [draft, setDraft] = React.useState(null);
       const [status, setStatus] = React.useState("正在读取本地设置…");
+      const [microphones, setMicrophones] = React.useState([]);
+      const refreshMicrophones = React.useCallback(async () => {
+        try {
+          if (!navigator.mediaDevices?.enumerateDevices) throw new Error("当前浏览器不支持设备枚举");
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          setMicrophones(devices.filter((device) => device.kind === "audioinput").map((device, index) => ({ id: device.deviceId, label: device.label || `麦克风 ${index + 1}（首次授权后可显示名称）` })));
+        } catch (error) { setStatus("读取麦克风失败：" + String(error?.message || error)); }
+      }, []);
       React.useEffect(() => {
         fetch(URL, { cache: "no-store" }).then((response) => {
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           return response.json();
         }).then((next) => { setPayload(next); setDraft({ ...next.config }); setStatus(""); }).catch((error) => setStatus("语音设置服务不可用：" + String(error?.message || error)));
       }, []);
+      React.useEffect(() => { refreshMicrophones(); }, [refreshMicrophones]);
       const save = async (prepareModel) => {
         try {
           setStatus(prepareModel ? "保存中，正在准备本地模型…" : "正在保存…");
@@ -53,9 +62,11 @@ window.__ModuleLoader__.load({
         React.createElement("h2", null, "语音输入"),
         React.createElement("p", { className: "wv-muted" }, "识别仍在本机 Electron 主进程运行；音频和文字不会为了识别发送到云端。"),
         React.createElement("section", { className: "wv-group" },
-          select("Whisper 模型", "model", payload.models, LABELS.models),
-          select("识别语言", "language", payload.languages, LABELS.languages),
-          select("运行设备", "device", payload.devices, LABELS.devices),
+            select("Whisper 模型", "model", payload.models, LABELS.models),
+            select("识别语言", "language", payload.languages, LABELS.languages),
+            React.createElement("label", { className: "wv-check" }, React.createElement("input", { type: "checkbox", checked: draft.simplifyChinese !== false, disabled: draft.language !== "zh", onChange: (event) => setDraft({ ...draft, simplifyChinese: event.target.checked }) }), React.createElement("span", null, "识别结果自动转为简体中文（仅中文可用）")),
+            select("运行设备", "device", payload.devices, LABELS.devices),
+          React.createElement("label", { className: "wv-field" }, React.createElement("span", null, "输入麦克风"), React.createElement("div", { className: "wv-row" }, React.createElement("select", { value: draft.microphoneId || "", onChange: (event) => setDraft({ ...draft, microphoneId: event.target.value }) }, React.createElement("option", { value: "" }, "系统默认麦克风"), microphones.map((device) => React.createElement("option", { value: device.id, key: device.id }, device.label))), React.createElement("button", { type: "button", onClick: refreshMicrophones }, "刷新"))),
           React.createElement("label", { className: "wv-field" }, React.createElement("span", null, "模型存放目录（留空使用默认缓存）"), React.createElement("div", { className: "wv-row" }, React.createElement("input", { value: draft.cacheDir, placeholder: "默认缓存目录", onChange: (event) => setDraft({ ...draft, cacheDir: event.target.value }) }), React.createElement("button", { type: "button", onClick: pickDirectory }, "浏览…"))),
           React.createElement("div", { className: "wv-actions" }, React.createElement("button", { onClick: () => save(false) }, "保存"), React.createElement("button", { onClick: () => save(true) }, "保存并准备模型")),
           React.createElement("p", { className: "wv-muted" }, status || "配置文件：" + payload.dataPath),

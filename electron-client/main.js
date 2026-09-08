@@ -8,6 +8,11 @@ const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
+const { Converter } = require("opencc-js");
+
+// Whisper 的中文模型常以繁体字输出。语言参数只能限定“中文”，不能限定字形；
+// 因此在本地把最终文本转换为简体，音频不会离开本机。
+const toSimplifiedChinese = Converter({ from: "tw", to: "cn" });
 
 const PORT = Number(process.env.DSH_PORT || 3080);
 const HOST = "127.0.0.1";
@@ -154,8 +159,10 @@ function injectUI(win) {
             });
             mic.buf = [];
           }
-          function startRecord(b){
-            navigator.mediaDevices.getUserMedia({ audio: true }).then(function(stream){
+          function startRecord(b, settings){
+            var deviceId = settings && settings.microphoneId;
+            var constraints = deviceId ? { audio: { deviceId: { exact: deviceId } } } : { audio: true };
+            navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
               var AC = window.AudioContext || window.webkitAudioContext;
               var ctx = new AC();
               var src = ctx.createMediaStreamSource(stream);
@@ -184,7 +191,7 @@ function injectUI(win) {
               WV.setSettings({ model: sel.value, language: lang.value }).then(function(){
                 mic.modelChosen = true;
                 if (panel.parentNode) panel.parentNode.removeChild(panel);
-                startRecord(b);
+                startRecord(b, s);
               });
             };
             panel.appendChild(ok);
@@ -212,8 +219,8 @@ function injectUI(win) {
               WV.getSettings().then(function(s){
                 if (!s || !s.model) { askModelFirst(b); return; }
                 if (!mic.modelChosen) mic.modelChosen = true;
-                startRecord(b);
-              }).catch(function(){ startRecord(b); });
+                startRecord(b, s);
+              }).catch(function(){ startRecord(b, null); });
             };
             WV.onStatus(function(msg){ if (msg) setStatus(b, msg); });
             b.setAttribute('data-whale-mic', '1');
@@ -228,7 +235,7 @@ function injectUI(win) {
 }
 
 // ---------- 本地 Whisper 语音(离线) ----------
-const VOICE_DEFAULTS = { model: "onnx-community/whisper-tiny", language: "zh", device: "cpu", cacheDir: "" };
+const VOICE_DEFAULTS = { model: "onnx-community/whisper-tiny", language: "zh", device: "cpu", cacheDir: "", microphoneId: "", simplifyChinese: true };
 const LANG_MAP = { auto: undefined, zh: "chinese", en: "english", ja: "japanese", ko: "korean" };
 const VOICE_MODELS = [
   { id: "onnx-community/whisper-tiny", label: "tiny 最小(≈40MB) 默认 · 中文略差" },
@@ -255,21 +262,40 @@ let _pipe = null;
 let _pipeModel = "";
 let _pipeCache = "";
 let _pipeDevice = "";
+let _pipeLoading = null;
+let _pipeLoadingKey = "";
+function whisperCacheDir(settings) {
+  const dir = String(settings?.cacheDir || "").trim() || path.join(app.getPath("userData"), "whisper-models");
+  fs.mkdirSync(dir, { recursive: true });
+  if (!fs.statSync(dir).isDirectory()) throw new Error("模型存放目录不是文件夹：" + dir);
+  return dir;
+}
 async function getWhisper(model) {
   const s = loadVoice();
-  if (_pipe && _pipeModel === model && _pipeCache === (s.cacheDir || "") && _pipeDevice === s.device) return _pipe;
-  const t = require("@huggingface/transformers");
-  if (s.cacheDir) t.env.cacheDir = s.cacheDir;
-  try {
-    const dev = s.device === "gpu" ? "gpu" : s.device === "wasm" ? "wasm" : "cpu";
-    _pipe = await t.pipeline("automatic-speech-recognition", model, { device: dev });
-  } catch (e) {
-    _pipe = await t.pipeline("automatic-speech-recognition", model); // GPU/WASM 不可用则回落 CPU
-  }
-  _pipeModel = model;
-  _pipeCache = s.cacheDir || "";
-  _pipeDevice = s.device;
-  return _pipe;
+  const cacheDir = whisperCacheDir(s);
+  if (_pipe && _pipeModel === model && _pipeCache === cacheDir && _pipeDevice === s.device) return _pipe;
+  const key = [model, cacheDir, s.device].join("\u0000");
+  if (_pipeLoading && _pipeLoadingKey === key) return _pipeLoading;
+  const task = (async () => {
+    const t = require("@huggingface/transformers");
+    // In a portable Electron build the package directory is inside app.asar and
+    // cannot store model files. Always use a real user-writable directory.
+    t.env.cacheDir = cacheDir;
+    try {
+      const dev = s.device === "gpu" ? "gpu" : s.device === "wasm" ? "wasm" : "cpu";
+      _pipe = await t.pipeline("automatic-speech-recognition", model, { device: dev });
+    } catch (e) {
+      _pipe = await t.pipeline("automatic-speech-recognition", model); // GPU/WASM 不可用则回落 CPU
+    }
+    _pipeModel = model;
+    _pipeCache = cacheDir;
+    _pipeDevice = s.device;
+    return _pipe;
+  })();
+  _pipeLoading = task;
+  _pipeLoadingKey = key;
+  try { return await task; }
+  finally { if (_pipeLoading === task) { _pipeLoading = null; _pipeLoadingKey = ""; } }
 }
 
 app.whenReady().then(async () => {
@@ -293,7 +319,8 @@ app.whenReady().then(async () => {
     const lang = LANG_MAP[s.language];
     const out = await pipe(audio, { language: lang, task: "transcribe", return_timestamps: false });
     send("");
-    const text = String(out && out.text ? out.text : (out && out[0] ? out[0].text : "")).trim();
+    const rawText = String(out && out.text ? out.text : (out && out[0] ? out[0].text : "")).trim();
+    const text = s.language === "zh" && s.simplifyChinese !== false ? toSimplifiedChinese(rawText) : rawText;
     return { text };
   });
 

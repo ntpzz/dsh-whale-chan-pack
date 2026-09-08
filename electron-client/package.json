@@ -9,7 +9,8 @@
     "dist:win": "electron-builder --win portable"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.0.0"
+    "@huggingface/transformers": "^3.0.0",
+    "opencc-js": "^1.4.2"
   },
   "devDependencies": {
     "electron": "^31.0.0",

@@ -51,6 +51,11 @@ window.__ModuleLoader__.load({
       if (amount >= 1e3) return (amount / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
       return String(Math.round(amount));
     };
+    const usageCost = (usage, config) => ((Number(usage?.uncachedInputTokens || 0) * Number(config.cacheMiss || 0) + Number(usage?.cacheReadTokens || 0) * Number(config.cacheHit || 0) + Number(usage?.cacheWriteTokens || 0) * Number(config.cacheMiss || 0) + Number(usage?.outputTokens || 0) * Number(config.output || 0)) / 1e6) * Number(config.usdToCurrency || 0);
+    const formatUsage = (template, usage, config) => {
+      const total = tokens(usage), cost = usageCost(usage, config);
+      return String(template || "").replaceAll("{tokens}", Math.round(total).toLocaleString()).replaceAll("{cost}", money(cost)).replaceAll("{currency}", config.currency || "¥").replaceAll("{input}", Math.round(Number(usage?.uncachedInputTokens || 0) + Number(usage?.cacheReadTokens || 0) + Number(usage?.cacheWriteTokens || 0)).toLocaleString()).replaceAll("{output}", Math.round(Number(usage?.outputTokens || 0)).toLocaleString());
+    };
 
     // The stock workspace row does not expose a session-row slot.  Keep this
     // tiny, DOM-only decoration isolated: token data still comes from the
@@ -91,6 +96,47 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    // The composer has no public session-usage slot. Decorate it from the
+    // official session store and persisted meter config, then reapply after
+    // React updates. This never changes message contents or the send action.
+    function ComposerUsageLabel() {
+      const ctx = ComposerUsageLabel.ctx;
+      React.useEffect(() => {
+        let stopped = false;
+        const sync = async () => {
+          try {
+            const saved = await postSnapshots(ctx);
+            const state = saved || await fetch(URL, { cache: "no-store" }).then((r) => r.json());
+            if (stopped || !state?.config) return;
+            const selected = [...document.querySelectorAll("[role='treeitem']")].find((item) => item.getAttribute("aria-selected") === "true" || /(?:^|[ _-])(selected|active)(?:$|[ _-])/i.test(String(item.className || "")));
+            const selectedTitle = selected?.querySelector("span[class*='_title']")?.textContent?.trim();
+            const pageTitle = document.querySelector("main h1, [role='main'] h1")?.textContent?.trim();
+            const row = collectSessions(ctx).find((entry) => String(entry.title || "").trim() === selectedTitle) || collectSessions(ctx).find((entry) => String(entry.title || "").trim() === pageTitle);
+            const old = document.querySelector("[data-whale-composer-usage]");
+            if (!row || state.config.composerPosition === "hidden") { old?.remove(); return; }
+            const editor = document.querySelector("[contenteditable='true'][role='textbox'], [contenteditable='true'][data-lexical-editor], textarea[role='textbox'], textarea");
+            const host = editor?.closest("form, [class*='composer'], [class*='Composer'], [role='toolbar']") || editor?.parentElement;
+            if (!host) return;
+            if (getComputedStyle(host).position === "static") host.style.position = "relative";
+            const badge = old || document.createElement("span");
+            badge.dataset.whaleComposerUsage = "";
+            badge.textContent = formatUsage(state.config.composerText, row.usage, state.config);
+            const position = state.config.composerPosition || "above-right";
+            const css = ["position:absolute", "z-index:3", "pointer-events:none", "font-size:12px", "line-height:20px", "padding:1px 7px", "border-radius:8px", "background:rgba(13,23,37,.92)", "color:#dcecff", "border:1px solid rgba(115,186,255,.45)", "white-space:nowrap"];
+            css.push(position.includes("left") ? "left:8px" : "right:8px");
+            css.push(position.startsWith("above") ? "bottom:calc(100% + 6px)" : "bottom:8px");
+            badge.style.cssText = css.join(";");
+            if (!old) host.appendChild(badge);
+          } catch {}
+        };
+        const observer = new MutationObserver(sync);
+        try { observer.observe(document.body, { childList: true, subtree: true }); } catch {}
+        const timer = setInterval(sync, 3500); sync();
+        return () => { stopped = true; observer.disconnect(); clearInterval(timer); document.querySelector("[data-whale-composer-usage]")?.remove(); };
+      }, [ctx]);
+      return null;
+    }
+
     function MeterPanel() {
       const ctx = MeterPanel.ctx;
       const [state, setState] = React.useState(null);
@@ -125,14 +171,14 @@ window.__ModuleLoader__.load({
       };
       if (!state || !draft) return React.createElement("div", { className: "wm-page" }, message);
       const total = state.totalTokens || 0;
-      const preview = draft.text.replace("{tokens}", total.toLocaleString()).replace("{currency}", draft.currency).replace("{cost}", money(state.cost));
+      const preview = formatUsage(draft.text, state.totals, draft);
       const field = (label, key, type = "text", step) => React.createElement("label", { className: "wm-field", key },
         React.createElement("span", null, label),
         React.createElement("input", { type, step, value: draft[key], onChange: (event) => setDraft({ ...draft, [key]: type === "number" ? Number(event.target.value) : event.target.value }) })
       );
       const rows = Object.values(state.sessions || {}).sort((a, b) => b.updatedAt - a.updatedAt);
       return React.createElement("div", { className: "wm-page" },
-        React.createElement("style", null, `.wm-page{max-width:920px;padding:8px 4px 40px;color:#edf3ff}.wm-page h2,.wm-page h3,.wm-card b{color:#fff}.wm-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.wm-card,.wm-group{border:1px solid #536983;border-radius:14px;padding:16px;background:#151e2a}.wm-card b{display:block;font-size:24px;margin-top:8px}.wm-group{margin-top:14px}.wm-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.wm-field{display:flex;flex-direction:column;gap:5px;font-size:13px;color:#f2f6ff}.wm-field input{padding:8px;border:1px solid #627996;border-radius:8px;background:#101722;color:#f7f9ff}.wm-field input::placeholder{color:#afbed3;opacity:1}.wm-actions{display:flex;gap:8px;margin-top:12px}.wm-actions button{padding:8px 12px;border-radius:8px;border:1px solid #6f89a8;background:#1b2a3b;color:#fff;cursor:pointer}.wm-actions button:hover{background:#27415c}.wm-table{width:100%;border-collapse:collapse;color:#f1f6ff}.wm-table td,.wm-table th{text-align:left;padding:8px;border-bottom:1px solid #3f526a}.wm-muted{color:#c3d0e3;opacity:1;font-size:12px}@media(max-width:700px){.wm-cards,.wm-grid{grid-template-columns:1fr}}`),
+        React.createElement("style", null, `.wm-page{max-width:920px;padding:8px 4px 40px;color:#edf3ff}.wm-page h2,.wm-page h3,.wm-card b{color:#fff}.wm-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.wm-card,.wm-group{border:1px solid #536983;border-radius:14px;padding:16px;background:#151e2a}.wm-card b{display:block;font-size:24px;margin-top:8px}.wm-group{margin-top:14px}.wm-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.wm-field{display:flex;flex-direction:column;gap:5px;font-size:13px;color:#f2f6ff}.wm-field input,.wm-field select{padding:8px;border:1px solid #627996;border-radius:8px;background:#101722;color:#f7f9ff;color-scheme:dark}.wm-field select option{background:#101722;color:#f7f9ff}.wm-field input::placeholder{color:#afbed3;opacity:1}.wm-actions{display:flex;gap:8px;margin-top:12px}.wm-actions button{padding:8px 12px;border-radius:8px;border:1px solid #6f89a8;background:#1b2a3b;color:#fff;cursor:pointer}.wm-actions button:hover{background:#27415c}.wm-table{width:100%;border-collapse:collapse;color:#f1f6ff}.wm-table td,.wm-table th{text-align:left;padding:8px;border-bottom:1px solid #3f526a}.wm-muted{color:#c3d0e3;opacity:1;font-size:12px}@media(max-width:700px){.wm-cards,.wm-grid{grid-template-columns:1fr}}`),
         React.createElement("h2", null, "费用 / 用量"),
         React.createElement("p", { className: "wm-muted" }, "优先使用 DSH 服务端 tokenUsage；价格为估算值，实际账单以提供商为准。"),
         React.createElement("div", { className: "wm-cards" },
@@ -140,7 +186,7 @@ window.__ModuleLoader__.load({
           React.createElement("div", { className: "wm-card" }, "估算费用", React.createElement("b", null, draft.currency + money(state.cost))),
           React.createElement("div", { className: "wm-card" }, "已记录会话", React.createElement("b", null, rows.length))
         ),
-        React.createElement("section", { className: "wm-group" }, React.createElement("h3", null, "显示文案"), field("模板（支持 {tokens} {currency} {cost}）", "text"), React.createElement("p", null, preview)),
+        React.createElement("section", { className: "wm-group" }, React.createElement("h3", null, "显示文案"), field("侧边栏/提示模板（支持 {tokens} {currency} {cost} {input} {output}）", "text"), React.createElement("p", null, preview), field("对话框当前会话模板", "composerText"), React.createElement("label", { className: "wm-field" }, React.createElement("span", null, "对话框提示位置"), React.createElement("select", { value: draft.composerPosition, onChange: (event) => setDraft({ ...draft, composerPosition: event.target.value }) }, React.createElement("option", { value: "above-right" }, "输入框上方右侧"), React.createElement("option", { value: "above-left" }, "输入框上方左侧"), React.createElement("option", { value: "inside-right" }, "输入框内右侧"), React.createElement("option", { value: "inside-left" }, "输入框内左侧"), React.createElement("option", { value: "hidden" }, "隐藏"))), React.createElement("p", { className: "wm-muted" }, "模板变量：{tokens} 总 Token；{cost} 估算金额；{currency} 货币；{input}/{output} 输入、输出 Token。")),
         React.createElement("section", { className: "wm-group" }, React.createElement("h3", null, "计费规则（USD / 1M token）"),
           React.createElement("div", { className: "wm-grid" }, field("缓存命中输入", "cacheHit", "number", "0.000001"), field("缓存未命中输入", "cacheMiss", "number", "0.000001"), field("输出", "output", "number", "0.000001"), field("美元换算系数", "usdToCurrency", "number", "0.01"), field("显示货币", "currency"), field("模型", "model")),
           React.createElement("label", { className: "wm-field" }, React.createElement("span", null, "每日自动跟随官方价格"), React.createElement("input", { type: "checkbox", checked: draft.autoUpdatePrice, onChange: (event) => setDraft({ ...draft, autoUpdatePrice: event.target.checked }) })),
@@ -158,6 +204,7 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       MeterPanel.ctx = ctx;
       SidebarTokenLabels.ctx = ctx;
+      ComposerUsageLabel.ctx = ctx;
       try {
         ctx.slots.inject("settings.section", () => ctx.slots.register({ name: "settings.section", id: "whale-meter", order: 60, label: "费用 / 用量" }, MeterPanel));
       } catch (error) {
@@ -167,6 +214,11 @@ window.__ModuleLoader__.load({
         ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register({ name: "sidebar.footer.action", id: "whale-session-tokens", order: 60 }, SidebarTokenLabels));
       } catch (error) {
         console.warn("[whale-meter] sidebar token labels unavailable", error);
+      }
+      try {
+        ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register({ name: "sidebar.footer.action", id: "whale-composer-usage", order: 61 }, ComposerUsageLabel));
+      } catch (error) {
+        console.warn("[whale-meter] composer usage label unavailable", error);
       }
     }
     exports.apply = apply;

@@ -1,4 +1,4 @@
-# 鲸鱼娘客户端 · dsh-whale-pack
+# 鲸鱼娘客户端 · dsh-whale-chan-pack
 
 > DeepSeek Harness (dsh)「鲸鱼娘」整合包：鲸鱼娘桌面客户端 + 鲸鱼娘主题皮肤 + 状态梗文案轮换。装一次即得一套带鲸鱼娘主题的桌面版 DSH。
 

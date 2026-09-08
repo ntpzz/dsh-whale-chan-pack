@@ -31,7 +31,7 @@
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -ProfileName web
 ```
 
-脚本会自动：用 pnpm 把上面 5 个包装进 `~/.dsh/profiles/<name>` → 注册进 `dsh.profile.bundles` → 写皮肤互斥（启用 manager + maid，停用 orca）→ 给 status-rotator 生成默认词库 `config.json`。
+脚本会自动：把费用/语音页、状态文案、`dsh-pilot` 和皮肤装进 `~/.dsh/profiles/<name>` → 注册 bundle → 写皮肤互斥（启用 manager + maid，停用 orca）→ 安装 Electron 依赖 → 在桌面创建唯一的 **DeepSeek Harness** Electron 快捷方式。
 
 ### 方式二：手动 `dsh plugin add`
 
@@ -39,6 +39,8 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -ProfileName web
 # （若你的 pnpm 提示 workspace-root 需 -w，请改用方式一的脚本）
 dsh plugin --profile web add dsh-status-rotator
 dsh plugin --profile web add github:guo6x/dsh-pilot
+dsh plugin --profile web add C:\\path\\to\\dsh-whale-chan-pack\\plugins\\dsh-whale-meter
+dsh plugin --profile web add C:\\path\\to\\dsh-whale-chan-pack\\plugins\\dsh-whale-voice
 dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/skin-manager'
 dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/maid-atelier'
 dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/orca-link'
@@ -57,13 +59,13 @@ dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/orca-lin
 
 ### 装完
 
-首次安装都需要**重启一次 `dsh web`** 才会生效（本包只改了配置层，不热改正在运行的实例）。重启后在「设置」里能看到 **状态文案** 页和 **皮肤管理** 页。
+首次安装都需要**重启一次 `dsh web`** 才会生效（本包只改了配置层，不热改正在运行的实例）。重启后在「设置」里能看到 **费用/用量**、**语音**、**状态文案** 与 **皮肤管理** 页；侧边栏底部出现 ✈️ 即表示浏览器控制可用。
 
 ---
 
 ## 客户端
 
-本包唯一客户端是 `electron-client`，启动方式：
+本包唯一客户端是 `electron-client`。安装脚本会在桌面创建 **DeepSeek Harness** 快捷方式，直接双击即可；也可手动启动：
 
 ```powershell
 cd electron-client

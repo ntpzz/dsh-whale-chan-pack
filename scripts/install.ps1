@@ -5,7 +5,7 @@
 # Requires: node, pnpm (>=9), a configured `dsh web` profile, git + network.
 param(
   [string]$ProfileName = "web",
-  [switch]$SkipLauncher   # if set, do not install the whale desktop launcher bundle
+  [switch]$SkipBrowserControl
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,7 +28,7 @@ $packs = @(
   @{ spec = "github:Small-tailqwq/dsh-deep-whale#path:/maid-atelier"; bundle = "@dsh-external/dsh-client-ui-skin-maid-atelier" }
   @{ spec = "github:Small-tailqwq/dsh-deep-whale#path:/orca-link";   bundle = "@dsh-external/dsh-client-ui-skin-orca-link" }
 )
-if ($SkipLauncher) { $packs = $packs | Where-Object { $_.bundle -ne "dsh-pilot" } }
+if ($SkipBrowserControl) { $packs = $packs | Where-Object { $_.bundle -ne "dsh-pilot" } }
 
 Write-Host ">> Installing plugins into profile '$ProfileName'"
 Push-Location $profileDir
@@ -59,4 +59,31 @@ if (Test-Path (Join-Path $sr "config.example.json")) {
 }
 
 Write-Host ">> Done. Restart dsh once:  dsh --profile $ProfileName"
-Write-Host "   Electron 客户端请运行 electron-client\\npm start。"
+
+# Install the single supported desktop client and create its Desktop shortcut.
+$electronDir = Join-Path $repoRoot "electron-client"
+$electronExe = Join-Path $electronDir "node_modules\electron\dist\electron.exe"
+if (-not (Test-Path $electronExe)) {
+  Write-Host ">> Installing Electron client dependencies"
+  Push-Location $electronDir
+  try {
+    & (Get-Command npm).Source ci
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed for electron-client" }
+  } finally { Pop-Location }
+}
+if (-not (Test-Path $electronExe)) { throw "Electron executable was not installed: $electronExe" }
+
+$desktop = [Environment]::GetFolderPath("Desktop")
+$oldLauncher = Join-Path $desktop "DeepSeek Harness.exe"
+if (Test-Path $oldLauncher) { Remove-Item -LiteralPath $oldLauncher -Force }
+$shortcutPath = Join-Path $desktop "DeepSeek Harness.lnk"
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = $electronExe
+$shortcut.Arguments = ('"' + $electronDir + '"')
+$shortcut.WorkingDirectory = $electronDir
+$shortcut.IconLocation = (Join-Path $electronDir "whale.ico")
+$shortcut.Description = "DeepSeek Harness Electron client"
+$shortcut.Save()
+
+Write-Host "   已创建桌面快捷方式：DeepSeek Harness（Electron 客户端）。"

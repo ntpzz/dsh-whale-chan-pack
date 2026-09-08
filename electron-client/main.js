@@ -3,7 +3,7 @@
 // - 用带鲸鱼娘图标的窗口打开其打印的 token URL
 // - 关闭窗口 => 停掉这个客户端启动的 dsh 并退出
 // - 轻量：页面内注入一条 “大肥鱼吃了 ~N token · ≈¥X” 估算提示
-const { app, BrowserWindow, session, ipcMain } = require("electron");
+const { app, BrowserWindow, session, ipcMain, dialog } = require("electron");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -287,7 +287,13 @@ app.whenReady().then(async () => {
 
   let url;
   try { url = await bootServer(); }
-  catch (e) { console.error("DeepSeek 客户端错误: " + e.message); app.exit(1); return; }
+  catch (e) {
+    const message = e && e.message ? e.message : String(e);
+    console.error("DeepSeek 客户端错误: " + message);
+    try { dialog.showErrorBox("DeepSeek Harness 启动失败", message); } catch {}
+    app.exit(1);
+    return;
+  }
 
   const win = new BrowserWindow({
     width: 1280, height: 860, icon: ICON,

@@ -5,13 +5,43 @@
   "description": "鲸鱼娘 DSH 桌面客户端(Electron)：隐藏起 dsh web + 带鲸鱼娘图标的独立窗口，关窗即停后端；本地 Whisper 离线语音输入",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist:win": "electron-builder --win portable"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.0.0"
   },
   "devDependencies": {
-    "electron": "^31.0.0"
+    "electron": "^31.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.ntpzz.dshwhalechan",
+    "productName": "DeepSeek Harness",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "whale.ico",
+      "package.json"
+    ],
+    "win": {
+      "icon": "whale.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "DeepSeek Harness.exe"
+    }
   },
   "license": "MIT"
 }

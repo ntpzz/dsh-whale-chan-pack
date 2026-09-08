@@ -60,9 +60,10 @@ if (Test-Path (Join-Path $sr "config.example.json")) {
 
 Write-Host ">> Done. Restart dsh once:  dsh --profile $ProfileName"
 
-# Install the single supported desktop client and create its Desktop shortcut.
+# Install and package the single supported desktop client.
 $electronDir = Join-Path $repoRoot "electron-client"
 $electronExe = Join-Path $electronDir "node_modules\electron\dist\electron.exe"
+$portableExe = Join-Path $electronDir "dist\DeepSeek Harness.exe"
 if (-not (Test-Path $electronExe)) {
   Write-Host ">> Installing Electron client dependencies"
   Push-Location $electronDir
@@ -72,18 +73,21 @@ if (-not (Test-Path $electronExe)) {
   } finally { Pop-Location }
 }
 if (-not (Test-Path $electronExe)) { throw "Electron executable was not installed: $electronExe" }
+if (-not (Test-Path $portableExe)) {
+  Write-Host ">> Packaging standalone DeepSeek Harness.exe"
+  Push-Location $electronDir
+  try {
+    & (Get-Command npm).Source run dist:win
+    if ($LASTEXITCODE -ne 0) { throw "Electron packaging failed" }
+  } finally { Pop-Location }
+}
+if (-not (Test-Path $portableExe)) { throw "Packaged executable was not created: $portableExe" }
 
 $desktop = [Environment]::GetFolderPath("Desktop")
 $oldLauncher = Join-Path $desktop "DeepSeek Harness.exe"
 if (Test-Path $oldLauncher) { Remove-Item -LiteralPath $oldLauncher -Force }
 $shortcutPath = Join-Path $desktop "DeepSeek Harness.lnk"
-$shell = New-Object -ComObject WScript.Shell
-$shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $electronExe
-$shortcut.Arguments = ('"' + $electronDir + '"')
-$shortcut.WorkingDirectory = $electronDir
-$shortcut.IconLocation = (Join-Path $electronDir "whale.ico")
-$shortcut.Description = "DeepSeek Harness Electron client"
-$shortcut.Save()
+if (Test-Path $shortcutPath) { Remove-Item -LiteralPath $shortcutPath -Force }
+Copy-Item -LiteralPath $portableExe -Destination $oldLauncher -Force
 
-Write-Host "   已创建桌面快捷方式：DeepSeek Harness（Electron 客户端）。"
+Write-Host "   已创建桌面程序：DeepSeek Harness.exe（Electron 客户端）。"

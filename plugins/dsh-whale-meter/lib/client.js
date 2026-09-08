@@ -44,6 +44,52 @@ window.__ModuleLoader__.load({
     };
     const money = (value) => Number(value || 0).toFixed(4);
     const tokens = (usage) => Object.values(usage || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const compactTokens = (value) => {
+      const amount = Math.max(0, Number(value) || 0);
+      if (amount >= 1e9) return (amount / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+      if (amount >= 1e6) return (amount / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+      if (amount >= 1e3) return (amount / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+      return String(Math.round(amount));
+    };
+
+    // The stock workspace row does not expose a session-row slot.  Keep this
+    // tiny, DOM-only decoration isolated: token data still comes from the
+    // official sessions store above, and a MutationObserver reapplies it when
+    // React rerenders the sidebar.
+    function SidebarTokenLabels() {
+      const ctx = SidebarTokenLabels.ctx;
+      const [, refresh] = React.useState(0);
+      React.useEffect(() => {
+        const sessions = access(ctx, "sessions");
+        const sync = () => refresh((value) => value + 1);
+        let unsubscribe = null;
+        try { unsubscribe = sessions?.list?.subscribe?.(sync) || null; } catch {}
+        const observer = new MutationObserver(sync);
+        try { observer.observe(document.body, { childList: true, subtree: true }); } catch {}
+        const timer = setInterval(sync, 3000);
+        return () => { try { unsubscribe?.(); } catch {} observer.disconnect(); clearInterval(timer); };
+      }, [ctx]);
+      React.useEffect(() => {
+        const byTitle = new Map();
+        for (const row of collectSessions(ctx)) byTitle.set(String(row.title || "").trim(), tokens(row.usage));
+        for (const item of document.querySelectorAll("[role='treeitem']")) {
+          const title = item.querySelector("span[class*='_title']");
+          if (!title) continue;
+          const value = byTitle.get(String(title.textContent || "").trim());
+          let badge = item.querySelector("[data-whale-session-token]");
+          if (value === undefined) { badge?.remove(); continue; }
+          if (!badge) {
+            badge = document.createElement("span");
+            badge.dataset.whaleSessionToken = "";
+            badge.style.cssText = "flex:none;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:20px;margin-right:6px;pointer-events:none;";
+            title.insertAdjacentElement("afterend", badge);
+          }
+          badge.textContent = compactTokens(value);
+          badge.title = `${Math.round(value).toLocaleString()} token`;
+        }
+      });
+      return null;
+    }
 
     function MeterPanel() {
       const ctx = MeterPanel.ctx;
@@ -111,10 +157,16 @@ window.__ModuleLoader__.load({
 
     function apply(ctx) {
       MeterPanel.ctx = ctx;
+      SidebarTokenLabels.ctx = ctx;
       try {
         ctx.slots.inject("settings.section", () => ctx.slots.register({ name: "settings.section", id: "whale-meter", order: 60, label: "费用 / 用量" }, MeterPanel));
       } catch (error) {
         console.warn("[whale-meter] settings section unavailable", error);
+      }
+      try {
+        ctx.slots.inject("sidebar.footer.action", () => ctx.slots.register({ name: "sidebar.footer.action", id: "whale-session-tokens", order: 60 }, SidebarTokenLabels));
+      } catch (error) {
+        console.warn("[whale-meter] sidebar token labels unavailable", error);
       }
     }
     exports.apply = apply;

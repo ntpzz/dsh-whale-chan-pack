@@ -31,7 +31,7 @@
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -ProfileName web
 ```
 
-脚本会自动：把费用/语音页、状态文案、`dsh-pilot` 和皮肤装进 `~/.dsh/profiles/<name>` → 注册 bundle → 写皮肤互斥（启用 manager + maid，停用 orca）→ 安装 Electron 依赖 → 在桌面创建唯一的 **DeepSeek Harness** Electron 快捷方式。
+脚本会自动：把费用/语音页、状态文案、`dsh-pilot` 和皮肤装进 `~/.dsh/profiles/<name>` → 注册 bundle → 写皮肤互斥（启用 manager + maid，停用 orca）→ 安装并打包 Electron → 在桌面创建唯一的 **DeepSeek Harness.exe**。
 
 ### 方式二：手动 `dsh plugin add`
 
@@ -65,11 +65,18 @@ dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/orca-lin
 
 ## 客户端
 
-本包唯一客户端是 `electron-client`。安装脚本会在桌面创建 **DeepSeek Harness** 快捷方式，直接双击即可；也可手动启动：
+本包唯一客户端是 `electron-client`。安装脚本会在桌面创建可直接双击的 **DeepSeek Harness.exe**，不是快捷方式。开发时也可手动启动：
 
 ```powershell
 cd electron-client
 npm start
+```
+
+重新生成 EXE：
+
+```powershell
+cd electron-client
+npm run dist:win
 ```
 
 ---

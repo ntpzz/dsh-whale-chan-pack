@@ -8,6 +8,8 @@ desktop.ini
 
 # node
 node_modules/
+electron-client/dist/
+work/
 *.local
 
 # local-only / secrets

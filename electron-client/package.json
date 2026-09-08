@@ -1,0 +1,14 @@
+{
+  "name": "dsh-whale-chan-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "鲸鱼娘 DSH 桌面客户端(Electron)：隐藏起 dsh web + 带鲸鱼娘图标的独立窗口，关窗即停后端",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  },
+  "license": "MIT"
+}

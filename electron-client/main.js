@@ -205,13 +205,6 @@ function injectUI(win) {
             try { if (send && send.parentNode) send.parentNode.insertBefore(b, send); else host.appendChild(b); } catch(e){}
           }
           if (WV) { attachMic(); setInterval(attachMic, 1200); }
-          if (WV && WV.openSettings) {
-            var gear = document.createElement('button');
-            gear.textContent = '⚙'; gear.title = '语音设置';
-            gear.style.cssText = 'position:fixed;top:12px;right:12px;z-index:999999;width:30px;height:30px;border-radius:50%;border:1px solid rgba(128,128,128,.4);background:transparent;cursor:pointer;font-size:16px;';
-            gear.onclick = function(){ WV.openSettings(); };
-            try { (document.body || document.documentElement).appendChild(gear); } catch(e){}
-          }
         } catch(e){}
       })();
     `;
@@ -220,7 +213,7 @@ function injectUI(win) {
 }
 
 // ---------- 本地 Whisper 语音(离线) ----------
-const VOICE_DEFAULTS = { model: "onnx-community/whisper-tiny", language: "auto", device: "cpu", cacheDir: "" };
+const VOICE_DEFAULTS = { model: "onnx-community/whisper-tiny", language: "zh", device: "cpu", cacheDir: "" };
 const LANG_MAP = { auto: undefined, zh: "chinese", en: "english", ja: "japanese", ko: "korean" };
 const VOICE_MODELS = [
   { id: "onnx-community/whisper-tiny", label: "tiny 最小(≈40MB) 默认 · 中文略差" },
@@ -232,16 +225,24 @@ const VOICE_DEVICES = [
   { id: "wasm", label: "WASM" },
   { id: "gpu", label: "GPU（需已装 onnxruntime-gpu，否则自动回落 CPU）" },
 ];
-function voicePath() { return path.join(app.getPath("userData"), "whale-voice.json"); }
-function loadVoice() { try { return Object.assign({}, VOICE_DEFAULTS, JSON.parse(fs.readFileSync(voicePath(), "utf8"))); } catch { return { ...VOICE_DEFAULTS }; } }
-function saveVoice(s) { try { fs.writeFileSync(voicePath(), JSON.stringify(s)); } catch {} }
+function voicePath() { return process.env.DSH_WHALE_VOICE_FILE || path.join(os.homedir(), ".dsh", "whale-voice", "config.json"); }
+function legacyVoicePath() { return path.join(app.getPath("userData"), "whale-voice.json"); }
+function loadVoice() {
+  try { return Object.assign({}, VOICE_DEFAULTS, JSON.parse(fs.readFileSync(voicePath(), "utf8"))); }
+  catch {
+    try { const migrated = Object.assign({}, VOICE_DEFAULTS, JSON.parse(fs.readFileSync(legacyVoicePath(), "utf8"))); saveVoice(migrated); return migrated; }
+    catch { return { ...VOICE_DEFAULTS }; }
+  }
+}
+function saveVoice(s) { try { fs.mkdirSync(path.dirname(voicePath()), { recursive: true }); fs.writeFileSync(voicePath(), JSON.stringify(s, null, 2) + "\n"); } catch {} }
 
 let _pipe = null;
 let _pipeModel = "";
 let _pipeCache = "";
+let _pipeDevice = "";
 async function getWhisper(model) {
   const s = loadVoice();
-  if (_pipe && _pipeModel === model && _pipeCache === (s.cacheDir || "")) return _pipe;
+  if (_pipe && _pipeModel === model && _pipeCache === (s.cacheDir || "") && _pipeDevice === s.device) return _pipe;
   const t = require("@huggingface/transformers");
   if (s.cacheDir) t.env.cacheDir = s.cacheDir;
   try {
@@ -252,54 +253,8 @@ async function getWhisper(model) {
   }
   _pipeModel = model;
   _pipeCache = s.cacheDir || "";
+  _pipeDevice = s.device;
   return _pipe;
-}
-
-// ---------- 语音设置窗口 ----------
-let settingsWin = null;
-const SETTINGS_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
-body{font-family:system-ui,sans-serif;background:#131417;color:#eee;padding:14px;width:360px}
-h3{margin:0 0 4px}label{display:block;margin:10px 0 3px;font-size:13px;color:#ccc}
-select,input{width:100%;padding:6px;box-sizing:border-box;background:#1d1f24;color:#eee;border:1px solid #3a3d45;border-radius:6px}
-button{padding:7px 10px;border-radius:6px;border:1px solid #3a3d45;background:#2a2d34;color:#eee;cursor:pointer;margin-top:8px}
-#msg{min-height:16px;font-size:12px;color:#6f6;margin:4px 0}.row{display:flex;gap:6px}.row input{flex:1}
-</style></head><body>
-<h3>🐋 语音设置 · 本地 Whisper</h3>
-<div id="msg"></div>
-<label>模型大小（越小越快 · 越大越准）</label><select id="model"></select>
-<label>识别语言（说话时固定这个语言，可避免被翻成英文）</label><select id="lang"></select>
-<label>运行设备</label><select id="device"></select>
-<label>模型存放目录（留空=默认缓存）</label><div class="row"><input id="cache" placeholder="默认自动"><button id="pick">浏览…</button></div>
-<button id="save">保存并下载模型</button>
-<button id="close">关闭</button>
-<script>
-var V=window.whaleVoice, $=function(i){return document.getElementById(i)};
-function fill(id,list,sel){var o=$(id);o.innerHTML='';list.forEach(function(it){var itx=(typeof it==='string')?{id:it,label:it}:it;var op=document.createElement('option');op.value=itx.id;op.textContent=itx.label;if(itx.id===sel)op.selected=true;o.appendChild(op);});}
-V.getSettings().then(function(s){
-  fill('model', s.models, s.model);
-  fill('lang', s.langs.map(function(l){return {id:l,label: l==='auto'?'自动判断（可能被翻成英文，建议选中文）':l}}), s.language);
-  fill('device', s.devices, s.device);
-  $('cache').value = s.cacheDir || '';
-  $('msg').textContent = '已加载当前设置';
-});
-$('pick').onclick=function(){V.pickDir().then(function(p){if(p){$('cache').value=p;}});};
-$('save').onclick=function(){
-  $('msg').textContent='保存中 / 下载模型…（首次需联网）';
-  V.setSettings({model:$('model').value, language:$('lang').value, device:$('device').value, cacheDir:$('cache').value.trim()}).then(function(){
-    return V.download();
-  }).then(function(){ $('msg').textContent='OK：模型就绪'; }).catch(function(e){ $('msg').textContent='失败：'+String(e); });
-};
-$('close').onclick=function(){window.close();};
-</script></body></html>`;
-
-function openSettingsWin() {
-  if (settingsWin && !settingsWin.isDestroyed()) { settingsWin.focus(); return; }
-  settingsWin = new BrowserWindow({
-    width: 400, height: 560, resizable: false, autoHideMenuBar: true, title: "语音设置 · 鲸鱼娘",
-    webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, "preload.js") },
-  });
-  settingsWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(SETTINGS_HTML));
-  settingsWin.on("closed", () => { settingsWin = null; });
 }
 
 app.whenReady().then(async () => {
@@ -327,7 +282,6 @@ app.whenReady().then(async () => {
     return { text };
   });
 
-  ipcMain.handle("whale-open-settings", () => { openSettingsWin(); return true; });
   ipcMain.handle("whale-pick-dir", async () => { const { dialog } = require("electron"); const r = await dialog.showOpenDialog({ properties: ["openDirectory"] }); return r.canceled ? null : (r.filePaths[0] || null); });
   ipcMain.handle("whale-download", async () => { const s = loadVoice(); await getWhisper(s.model); return "ok"; });
 

@@ -1,6 +1,6 @@
 # Installer for the dsh-whale-pack 整合包 (plugins into a dsh web profile).
 # Installs: dsh-status-rotator, dsh-deep-whale (manager + maid-atelier + orca-link),
-#           dsh-whale-desktop-launcher. Then enables skin-manager + maid-atelier
+#           dsh-pilot browser control. Then enables skin-manager + maid-atelier
 #           (disables orca-link) and seeds status-rotator config.
 # Requires: node, pnpm (>=9), a configured `dsh web` profile, git + network.
 param(
@@ -17,15 +17,18 @@ if (-not (Test-Path $pkgPath)) { throw "profile not found: $profileDir (run `dsh
 $pnpm = Get-Command pnpm -ErrorAction SilentlyContinue
 if (-not $pnpm) { throw "pnpm not found on PATH. Install it first:  npm i -g pnpm@9" }
 $node = (Get-Command node).Source
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 
 $packs = @(
+  @{ spec = (Join-Path $repoRoot "plugins\dsh-whale-meter"); bundle = "dsh-whale-meter" }
+  @{ spec = (Join-Path $repoRoot "plugins\dsh-whale-voice");  bundle = "dsh-whale-voice" }
   @{ spec = "dsh-status-rotator";                            bundle = "dsh-status-rotator" }
-  @{ spec = "github:HUITianYi/dsh-whale-desktop-launcher#v0.1.0"; bundle = "dsh-whale-desktop-launcher" }
+  @{ spec = "github:guo6x/dsh-pilot";                         bundle = "dsh-pilot" }
   @{ spec = "github:Small-tailqwq/dsh-deep-whale#path:/skin-manager"; bundle = "@dsh-external/dsh-client-ui-skin-deep-whale-manager" }
   @{ spec = "github:Small-tailqwq/dsh-deep-whale#path:/maid-atelier"; bundle = "@dsh-external/dsh-client-ui-skin-maid-atelier" }
   @{ spec = "github:Small-tailqwq/dsh-deep-whale#path:/orca-link";   bundle = "@dsh-external/dsh-client-ui-skin-orca-link" }
 )
-if ($SkipLauncher) { $packs = $packs | Where-Object { $_.bundle -ne "dsh-whale-desktop-launcher" } }
+if ($SkipLauncher) { $packs = $packs | Where-Object { $_.bundle -ne "dsh-pilot" } }
 
 Write-Host ">> Installing plugins into profile '$ProfileName'"
 Push-Location $profileDir
@@ -56,4 +59,4 @@ if (Test-Path (Join-Path $sr "config.example.json")) {
 }
 
 Write-Host ">> Done. Restart dsh once:  dsh --profile $ProfileName"
-Write-Host "   Then open Desktop entries: launch.vbs (关窗即退) and stop.vbs."
+Write-Host "   Electron 客户端请运行 electron-client\\npm start。"

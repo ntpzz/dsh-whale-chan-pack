@@ -6,7 +6,6 @@ contextBridge.exposeInMainWorld("whaleVoice", {
   setSettings: (s) => ipcRenderer.invoke("whale-settings-set", s),
   transcribe: (audio) => ipcRenderer.invoke("whale-transcribe", audio),
   download: () => ipcRenderer.invoke("whale-download"),
-  openSettings: () => ipcRenderer.invoke("whale-open-settings"),
   pickDir: () => ipcRenderer.invoke("whale-pick-dir"),
   onStatus: (cb) => {
     const l = (_e, msg) => cb(msg);

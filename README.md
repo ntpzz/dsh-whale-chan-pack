@@ -1,6 +1,6 @@
-# 鲸鱼娘客户端 · dsh-whale-chan-pack
+# dsh-whale-chan-pack
 
-> DeepSeek Harness (dsh)「鲸鱼娘」整合包：鲸鱼娘桌面客户端 + 鲸鱼娘主题皮肤 + 状态梗文案轮换。装一次即得一套带鲸鱼娘主题的桌面版 DSH。
+> DeepSeek Harness (DSH) 鲸鱼娘整合包。项目只保留一个桌面客户端：`electron-client`。
 
 面向 Windows（`dsh web`），纯配置集成，不修改 dsh 本体。
 
@@ -10,12 +10,13 @@
 
 | 组件 | 作用 | 上游 |
 |---|---|---|
-| **dsh-whale-desktop-launcher** | 桌面鲸鱼启动器 `DeepSeek Harness.exe`（隐藏后端 + 复用实例） | [HUITianYi/dsh-whale-desktop-launcher](https://github.com/HUITianYi/dsh-whale-desktop-launcher) |
+| **dsh-pilot** | 通过 Chrome CDP 控制真实浏览器（导航、点击、输入、截图） | [guo6x/dsh-pilot](https://github.com/guo6x/dsh-pilot) |
 | **dsh-status-rotator** | 把回合底部 “Deep diving…” 换成可轮换/打字机/渐变/弹幕的状态文案 | [01Virex/dsh-status-rotator](https://github.com/01Virex/dsh-status-rotator) |
 | **dsh-deep-whale** (skin-manager) | 皮肤发现/切换面板 | [Small-tailqwq/dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale) |
 | **dsh-deep-whale** (maid-atelier) | 深海女仆工坊皮肤（本包默认启用） | 同上 |
 | **dsh-deep-whale** (orca-link) | 虎鲸链路皮肤（本包默认停用，可到设置切换） | 同上 |
-| **desktop/**（本包自带） | 「关窗即退」客户端：隐藏启动 `dsh web`，关掉独立窗口即停后端 | —（本包，MIT） |
+| **dsh-whale-meter** | 设置中的费用/用量页，本地持久化统计 | 本项目 |
+| **dsh-whale-voice** | 设置中的语音配置页，与 Electron 本地 Whisper 共享配置 | 本项目 |
 
 依赖运行环境：**DeepSeek Harness (`dsh web`) + Node ≥ 22.19 + Chrome/Edge + pnpm ≥ 9**。
 
@@ -37,7 +38,7 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -ProfileName web
 ```powershell
 # （若你的 pnpm 提示 workspace-root 需 -w，请改用方式一的脚本）
 dsh plugin --profile web add dsh-status-rotator
-dsh plugin --profile web add github:HUITianYi/dsh-whale-desktop-launcher#v0.1.0
+dsh plugin --profile web add github:guo6x/dsh-pilot
 dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/skin-manager'
 dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/maid-atelier'
 dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/orca-link'
@@ -60,22 +61,20 @@ dsh plugin --profile web add 'github:Small-tailqwq/dsh-deep-whale#path:/orca-lin
 
 ---
 
-## 桌面客户端（本包自带）
+## 客户端
 
-| 文件 | 用法 |
-|---|---|
-| `desktop\launch.vbs` | 双击：隐藏启动 `dsh web` + 独立 Chrome 应用窗口；**关窗即自动停后端** |
-| `desktop\stop.vbs` | 双击：停掉占用 127.0.0.1:3080 的后台 `dsh web`（配合常驻型鲸鱼 EXE 用） |
+本包唯一客户端是 `electron-client`，启动方式：
 
-可把 `launch.vbs` 右键发送到桌面/创建快捷方式。想要桌面直接留一个快捷方式（如 `DeepSeek（关窗即退）.lnk`），指向 `wscript.exe` 并给参数为 `launch.vbs` 的路径即可。可用环境变量覆盖路径：`DSH_CLIENT_NODE / DSH_CLIENT_DSH / DSH_CLIENT_CHROME / DSH_CLIENT_PORT / DSH_CLIENT_WORKSPACE`。
-
-> 注意：`launch.vbs` 需要端口 3080 空闲；若已有其它 `dsh` 实例在跑（例如旧终端里手启动的），先停掉它再双击。
+```powershell
+cd electron-client
+npm start
+```
 
 ---
 
 ## 许可与引用（务必阅读）
 
-本项目（整合编排、`desktop/` 客户端、安装脚本）以 **MIT** 发布，见 [LICENSE](LICENSE)。
+本项目（整合编排、Electron 客户端、安装脚本）以 **MIT** 发布，见 [LICENSE](LICENSE)。
 
 **本作品只是“打包”，不拥有上游代码/美术版权**。各上游仓库及许可、美术署名请见 [NOTICE.md](NOTICE.md)。其中鲸鱼娘相关**美术**为 **CC BY-NC-SA 4.0（禁止商用）**，发布整合包时请保留署名与许可链接。
 
